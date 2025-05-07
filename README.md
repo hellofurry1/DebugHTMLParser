@@ -8,7 +8,6 @@
 ├── requirements.txt
 ├── main.py
 ├── plugin_test.py
-├── data.db
 ├── utils
 │   ├── info.py
 │   ├── SingletClass.py
