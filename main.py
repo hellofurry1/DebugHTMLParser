@@ -5,6 +5,8 @@ import sqlite3
 import sys
 import threading
 import traceback
+from datetime import datetime
+
 import requests
 import importlib
 import websocket
@@ -79,12 +81,15 @@ class DataBase:
         插入数据，data为列表或元组
         """
         if isinstance(data, dict):
-            data = [tuple(data.values())]
+            data = list(data.values())
+        data.append(datetime.now().timestamp())
+        data = tuple(data)
         try:
-            self.cursor.executemany(f"INSERT INTO {table_name} VALUES ({', '.join(['?' for _ in range(len(data[0]))])})", data)
+            self.cursor.execute(f"INSERT INTO {table_name} VALUES ({', '.join(['?'] *len(data))})", data)
             self.conn.commit()
         except sqlite3.Error as e:
-            log_info(f"插入数据 {data} 到表 {table_name} 失败: {e}", 'error')
+            print(f"插入数据到表 {table_name} 失败: {e}")
+            print(f"数据长度: {len(data)}")
 
     def rollback_new_data(self, table_name: str):
         """
@@ -372,7 +377,6 @@ class AppGUI:
                 index = item["index"]
                 parser = item["object"][0]
                 shower = item["object"][1]
-                shower.set_callback(self.callback)
                 self.notebook.select(index)
             self.status_var.set(f"正在获取HTML")
             self.sub_status_var.set(f"正在获取{url}")
