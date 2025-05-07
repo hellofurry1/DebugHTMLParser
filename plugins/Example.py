@@ -1,3 +1,8 @@
+import re
+import types
+from tkinter import ttk
+from typing import Tuple, List, Optional, Set, Dict
+
 def doc(obj, doc_str):
     """
     用于文档说明，不影响代码运行。
@@ -61,6 +66,53 @@ doc(translation_table,
     该字典用于将不可用字符转换为下划线。
     """
     )
+
+
+# ================ 以下为示例代码 =================
+
+def example_exists(self, example_name: str) -> bool:
+    """
+    示例代码。
+    用于判断指定名称的示例是否存在。
+    需要自己实现。
+    """
+
+    return True
+
+db_obj.example_exists = types.MethodType(example_exists, db_obj)
+
+class ExampleShower(metaclass=SingletonMeta):
+
+    def __init__(self, labelframe: ttk.LabelFrame):
+        """
+        示例代码。
+        自己的组件在这里实现。
+        """
+        ...
+
+
+class ExampleHTMLParser:
+    """
+    示例代码。
+    自己的HTML解析器在这里实现。
+
+    """
+    TableName = ""
+    TableColumns: List[Tuple[str, str]] = [
+        ("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+        ("name", "TEXT")
+    ]
+    SitePatterns : List[re.Pattern] = [
+        re.compile(r".*example\.com.*")
+    ]
+    def __init__(self):
+        ...
+    def parse(self, html: str):
+        """
+        示例代码。
+        解析HTML内容, 是主程序的调用接口。
+        """
+
 
 
 
