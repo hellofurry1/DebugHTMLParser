@@ -19,7 +19,7 @@ from utils.SingleClass import SingletonMeta, translation_table
 
 def bsky_exists(self, url: str):
     self.cursor.execute(f"""
-SELECT * FROM {self.TableName} WHERE url = ?
+SELECT * FROM {BskyHTMLParser.TableName} WHERE img_url = ?
 """, (url,))
     return self.cursor.fetchone() is not None
 
@@ -59,7 +59,7 @@ class DataTree:
             "author": self.author,
             "pid": self.pid,
             "len": len(self.inner_data),
-            "inner_data": self.inner_data
+            "parts": self.inner_data
         }
 
     def __str__(self):
@@ -67,7 +67,7 @@ class DataTree:
         string += f"author: {self.author}\n"
         string += f"pid: {self.pid}\n"
         string += f"len: {len(self.inner_data)}\n"
-        string += f"inner_data:\n"
+        string += f"parts:\n"
         for data in self.inner_data:
             inner_str = [f"\t{k}: {v}" for k, v in data.items()]
             string += "\n".join(inner_str)
@@ -185,7 +185,7 @@ class BskyShower(metaclass=SingletonMeta):
         frame.pack(pady=5)
         ttk.Label(frame, text=label_text + ": ").pack(side="top")
         if label_text == "content" or label_text == "time":
-            text_widget = tk.Text(frame, height=2 if label_text != "content" else 5, width=20)
+            text_widget = tk.Text(frame, height=2 if label_text != "content" else 7, width=20)
             text_widget.insert(tk.END, value)
             text_widget.configure(state="disabled")
             text_widget.pack(side="top")
@@ -237,14 +237,19 @@ class BskyShower(metaclass=SingletonMeta):
 
     def update_interface(self, new_tree):
         self.tree = new_tree
-        self.author_entry.delete(0, tk.END)
-        self.author_entry.insert(0, self.tree['author'])
-        self.pid_entry.delete(0, tk.END)
-        self.pid_entry.insert(0, self.tree['pid'])
-
-        # 清空现有的页面
         for frame in self.page_frames:
             self.notebook.forget(self.notebook.index(frame))
+        self.author_entry.configure(state="normal")
+        self.author_entry.delete(0, tk.END)
+        self.author_entry.insert(0, self.tree['author'])
+        self.author_entry.configure(state="readonly")
+
+        self.pid_entry.configure(state="normal")
+        self.pid_entry.delete(0, tk.END)
+        self.pid_entry.insert(0, self.tree['pid'])
+        self.pid_entry.configure(state="readonly")
+
+        # 清空现有的页面
         self.page_frames = []
 
         for i in range(self.tree['len']):
@@ -300,62 +305,74 @@ class BskyHTMLParser:
         print("\n".join(string))
 
     def parse(self, html: str):
-        soup = BeautifulSoup(html, "html.parser")
+        try:
+            soup = BeautifulSoup(html, "html.parser")
 
-        blocks = soup.find_all("div", {"data-testid": re.compile(r".*postThreadItem.*")})
-        main_block = blocks[0]
-        comments_block = blocks[1:]
-        sub_blocks = main_block.find_all(recursive=False) # 2
-        author_block = sub_blocks[0]
-        tweet_block = sub_blocks[1]
-        author = author_block.find_all('div', {"dir": "auto"})[1].text.strip()[2:-1]
-        self.data.author = author
-        self.data_tree.author = author
+            blocks = soup.find_all("div", {"data-testid": re.compile(r".*postThreadItem.*")})
+            main_block = blocks[0]
+            comments_block = blocks[1:]
+            sub_blocks = main_block.find_all(recursive=False) # 2
+            author_block = sub_blocks[0]
+            tweet_block = sub_blocks[1]
+            author = author_block.find_all('div', {"dir": "auto"})[1].text.strip()[2:-1]
+            self.data.author = author
+            self.data_tree.author = author
 
-        autos = tweet_block.find_all('div', {"dir": "auto"})
+            autos = tweet_block.find_all('div', {"dir": "auto"})
 
-        links = autos[0].find_all('a')
-        tags_blocks = [link for link in links if link.get('href') and self.tag_pattern.search(link.get('href'))]
+            links = autos[0].find_all('a')
+            tags_blocks = [link for link in links if link.get('href') and self.tag_pattern.search(link.get('href'))]
 
-        for tag in tags_blocks:
-            tag_name = self.tag_pattern.search(tag.get('href')).group(1)
-            self.data.tags.append(tag_name)
+            for tag in tags_blocks:
+                tag_name = self.tag_pattern.search(tag.get('href')).group(1)
+                self.data.tags.append(tag_name)
 
 
-        desc = "\n".join([part.strip() for part in autos[0].text.strip().split("\n") if part.strip()])
-        self.data.desc = desc
+            desc = "\n".join([part.strip() for part in autos[0].text.strip().split("\n") if part.strip()])
+            self.data.desc = desc
 
-        # time
-        time_str = autos[1].text.strip()
-        # time_str = '2025年5月4日 22:19'
-        time_obj = datetime.strptime(time_str, '%Y年%m月%d日 %H:%M')
-        self.data.upload_time = time_obj.strftime('%Y-%m-%d %H:%M:%S')
+            # time
+            time_str = autos[1].text.strip()
+            # time_str = '2025年5月4日 22:19'
+            time_obj = datetime.strptime(time_str, '%Y年%m月%d日 %H:%M')
+            self.data.upload_time = time_obj.strftime('%Y-%m-%d %H:%M:%S')
 
-        # url
-        url = soup.find('a', {"aria-label": time_str}).get('href')
-        url = "https://bsky.app" + url
-        self.data.url = url
-        self.data_tree.pid = url.split("/")[-1]
-        # images
-        img_urls = []
-        images = tweet_block.find_all('img')
-        for img in images:
-            img_url = self.full_size_format.format(
-                self.thumbnail_pattern.search(img.get('src')).group(1)
-            )
-            img_urls.append(img_url)
-        inner_data = DataTree.InnerData()
-        inner_data.time = self.data.upload_time
-        inner_data.content = desc
-        inner_data.img_urls = img_urls
-        self.data_tree.add_data(inner_data)
-        self.parse_comments(comments_block)
+            # url
+            try:
+                url = soup.find('a', {"aria-label": time_str}).get('href')
+                url = "https://bsky.app" + url
+                self.data.url = url
+                self.data_tree.pid = url.split("/")[-1]
+            except AttributeError:
+                url = soup.find("meta", {"property": "og:url"}).get("content")
+                self.data.url = url
+                self.data_tree.pid = url.split("/")[-1]
+            # images
+            img_urls = []
+            images = tweet_block.find_all('img')
+            for img in images:
+                img_url = self.full_size_format.format(
+                    self.thumbnail_pattern.search(img.get('src')).group(1)
+                )
+                img_urls.append(img_url)
+            inner_data = DataTree.InnerData()
+            inner_data.time = self.data.upload_time
+            inner_data.content = desc
+            inner_data.img_urls = img_urls
+            self.data_tree.add_data(inner_data)
+            self.parse_comments(comments_block)
+            self.show_info()
 
-        threading.Thread(target=self.download)
+            threading.Thread(target=self.download, daemon=True).start()
+        except Exception as e:
+            print(f"解析出错: {e}")
+            traceback.print_exc()
 
     def download(self):
         for item in self.data_tree.inner_data:
             for img_url in item["img_urls"]:
+                if db_obj.bsky_exists(img_url):
+                    continue
                 try:
                     self.data.execute(img_url)
                     db_obj.insert_data(self.TableName, self.data.save_type())
@@ -405,8 +422,10 @@ class BskyHTMLParser:
         self.data_tree.add_data(inner_data)
 
     def show_info(self):
-        self.shower.show_info(self.data_tree.dict())
-
+        try:
+            self.shower.show_info(self.data_tree.dict())
+        except Exception as e:
+            print(f"显示信息出错: {e}")
 
 
 
@@ -442,7 +461,7 @@ class TestGUI:
 if __name__ == '__main__':
     # test_gui = TestGUI()
     obj = BskyHTMLParser()
-    with open("debug.html", "r", encoding="utf-8") as f:
+    with open("../debug.html", "r", encoding="utf-8") as f:
         html = f.read()
     obj.parse(html)
     print(obj.data_tree)

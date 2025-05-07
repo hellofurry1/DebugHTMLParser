@@ -197,10 +197,15 @@ class TwitterShower(metaclass=SingletonMeta):
 
     def update_interface(self, new_tree):
         self.tree = new_tree
+        self.author_entry.configure(state="normal")
         self.author_entry.delete(0, tk.END)
         self.author_entry.insert(0, self.tree['author'])
+        self.author_entry.configure(state="readonly")
+
+        self.pid_entry.configure(state="normal")
         self.pid_entry.delete(0, tk.END)
         self.pid_entry.insert(0, self.tree['pid'])
+        self.pid_entry.configure(state="readonly")
 
         # 清空现有的页面
         for frame in self.page_frames:
